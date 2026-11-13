@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Solitaire · Filiz Yeşili FM</title>
+</head>
+<body>
+<style>
+:root{--cw:min(11.5vw,92px);--felt:#0e6b38;--ink:#111;--red:#c00;--card:#fff;--text:#f3f5f7;color-scheme:dark;box-sizing:border-box}
+html,body{margin:0;min-height:100%}
+body{background:radial-gradient(circle at 50% 30%,var(--felt),#06361b);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;-webkit-user-select:none;user-select:none}
+#bar{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;justify-content:center;padding:10px;background:rgba(0,0,0,.25);font-size:15px}
+#bar b{font-variant-numeric:tabular-nums}
+button{font:inherit;color:#fff;background:rgba(0,0,0,.45);border:1px solid rgba(255,255,255,.25);border-radius:8px;padding:6px 12px;cursor:pointer}
+button:hover{background:rgba(0,0,0,.65)}
+#board{display:grid;grid-template-columns:repeat(7,var(--cw));justify-content:center;gap:calc(var(--cw)*.18) calc(var(--cw)*.12);padding:14px 6px 60px}
+body.paused #board{visibility:hidden}
+.slot{position:relative;width:var(--cw);height:calc(var(--cw)*1.4);border:2px dotted rgba(0,0,0,.35);border-radius:7px;box-sizing:border-box}
+.slot .wm{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:calc(var(--cw)*.6);color:rgba(0,0,0,.3);pointer-events:none}
+.card{position:absolute;left:-2px;width:var(--cw);height:calc(var(--cw)*1.4);box-sizing:border-box;border-radius:7px;box-shadow:0 1px 4px rgba(0,0,0,.5);cursor:pointer}
+.card.up{background:var(--card);color:var(--ink)}
+.card.up.red{color:var(--red)}
+.card.back{background:repeating-linear-gradient(45deg,#1d4ed8 0 6px,#1e3a8a 6px 12px);border:3px solid #fff}
+.card .tl{position:absolute;top:calc(var(--cw)*.03);left:calc(var(--cw)*.06);font-weight:700;font-size:calc(var(--cw)*.25);line-height:1.1;pointer-events:none}
+.card .mid{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:calc(var(--cw)*.55);opacity:.9;pointer-events:none;padding-top:calc(var(--cw)*.2)}
+.card.sel{box-shadow:0 0 0 3px #fcdb1a,0 0 10px 4px #fcdb1a}
+.reload{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:calc(var(--cw)*.5);opacity:.4;cursor:pointer}
+#aw{position:fixed;left:0;right:0;bottom:0;border-radius:0;padding:14px;background:rgba(0,0,0,.85);z-index:5}
+#aw[hidden]{display:none}
+#cv{position:fixed;inset:0;pointer-events:none;z-index:10}
+#msg{position:fixed;top:30%;left:0;right:0;text-align:center;font-size:clamp(28px,7vw,56px);font-weight:700;text-shadow:0 2px 8px #000;pointer-events:none;z-index:11}
+</style>
+
+<div id="bar">
+  <button id="pp" title="Duraklat">⏸</button>
+  <span>Süre: <b id="tm">00:00</b></span>
+  <span>Hamle: <b id="mv">0</b></span>
+  <span>Puan: <b id="sc">0</b></span>
+  <button id="nw">Yeni Oyun</button>
+</div>
+<div id="board"></div>
+<button id="aw" hidden>Otomatik Bitir</button>
+<canvas id="cv"></canvas>
+<div id="msg"></div>
+
+<script>
+const SU=['♠','♥','♦','♣'], RK=['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
+const $=id=>document.getElementById(id);
+let stock,waste,found,tab,sel,moves,score,time,timer,won,paused,last={p:'',k:0,t:0},rafId;
+
+const isRed=c=>c.s===1||c.s===2;
+
+function newGame(){
+  const deck=[];
+  for(let s=0;s<4;s++)for(let r=1;r<=13;r++)deck.push({r,s,up:false});
+  for(let i=deck.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[deck[i],deck[j]]=[deck[j],deck[i]];}
+  tab=[];
+  for(let i=0;i<7;i++){tab.push(deck.splice(0,i+1));tab[i][i].up=true;}
+  stock=deck; waste=[]; found=[[],[],[],[]];
+  sel=null; moves=0; score=0; time=0; won=false; paused=false;
+  clearInterval(timer); timer=null;
+  cancelAnimationFrame(rafId);
+  $('cv').getContext('2d').clearRect(0,0,9999,9999);
+  $('msg').textContent='';
+  document.body.classList.remove('paused');
+  $('pp').textContent='⏸';
+  draw();
+}
+
+function start(){ if(!timer&&!won&&!paused) timer=setInterval(tick,1000); }
+function tick(){
+  time++;
+  if(time%10===0) addScore(-2);
+  showStats();
+}
+function addScore(n){ score=Math.max(0,score+n); }
+function showStats(){
+  const m=String(Math.floor(time/60)).padStart(2,'0'), s=String(time%60).padStart(2,'0');
+  $('tm').textContent=m+':'+s; $('mv').textContent=moves; $('sc').textContent=score;
+}
+
+function cardHTML(c,p,k,y){
+  const cls=['card',c.up?'up':'back',c.up&&isRed(c)?'red':'',isSel(p,k)?'sel':''].join(' ');
+  const face=c.up?`<span class="tl">${RK[c.r-1]}${SU[c.s]}</span><span class="mid">${SU[c.s]}</span>`:'';
+  return `<div class="${cls}" data-p="${p}" data-k="${k}" style="top:calc(var(--cw)*${y})">${face}</div>`;
+}
+function isSel(p,k){ return sel&&sel.p===p&&k>=sel.k; }
+
+function draw(){
+  let h='';
+  h+=`<div class="slot" data-p="s">${stock.length?cardHTML(stock[stock.length-1],'s',stock.length-1,0):'<div class="reload">↻</div>'}</div>`;
+  h+=`<div class="slot" data-p="w">${waste.length?cardHTML(waste[waste.length-1],'w',waste.length-1,0):''}</div>`;
+  h+='<div></div>';
+  for(let j=0;j<4;j++){
+    const f=found[j];
+    h+=`<div class="slot" data-p="f${j}">${f.length?cardHTML(f[f.length-1],'f'+j,f.length-1,0):`<span class="wm">${SU[j]}</span>`}</div>`;
+  }
+  for(let i=0;i<7;i++){
+    let y=0,inner='',lastStep=0;
+    tab[i].forEach((c,k)=>{inner+=cardHTML(c,'t'+i,k,y);lastStep=c.up?0.4:0.2;y+=lastStep;});
+    const total=tab[i].length?y-lastStep:0;
+    h+=`<div class="slot" data-p="t${i}" style="height:calc(var(--cw)*${1.4+total})">${inner}</div>`;
+  }
+  $('board').innerHTML=h;
+  showStats();
+  const allUp=tab.every(p=>p.every(c=>c.up));
+  $('aw').hidden=!(allUp&&!stock.length&&!waste.length&&!won);
+}
+
+function getCards(p,k){
+  const t=p[0], i=+p.slice(1);
+  if(t==='t') return tab[i].slice(k);
+  if(t==='w') return waste.length?[waste[waste.length-1]]:[];
+  if(t==='f') return found[i].length?[found[i][found[i].length-1]]:[];
+  return [];
+}
+function removeCards(p,n){
+  const t=p[0], i=+p.slice(1);
+  if(t==='t') return tab[i].splice(tab[i].length-n,n);
+  if(t==='w') return [waste.pop()];
+  if(t==='f') return [found[i].pop()];
+}
+
+function tryMove(from,to){
+  if(from.p===to) return false;
+  const cs=getCards(from.p,from.k); if(!cs.length) return false;
+  const c=cs[0], t=to[0], j=+to.slice(1);
+  if(t==='f'){
+    if(cs.length!==1||c.s!==j||found[j].length+1!==c.r) return false;
+  } else if(t==='t'){
+    const d=tab[j][tab[j].length-1];
+    if(d){ if(!d.up||isRed(d)===isRed(c)||d.r!==c.r+1) return false; }
+    else if(c.r!==13) return false;
+  } else return false;
+
+  const moved=removeCards(from.p,cs.length);
+  (t==='f'?found[j]:tab[j]).push(...moved);
+
+  const ft=from.p[0];
+  if(ft==='w') addScore(t==='f'?10:5);
+  else if(ft==='t'&&t==='f') addScore(10);
+  else if(ft==='f'&&t==='t') addScore(-15);
+  if(ft==='t'){
+    const src=tab[+from.p.slice(1)], top=src[src.length-1];
+    if(top&&!top.up){top.up=true;addScore(5);}
+  }
+  moves++; start(); checkWin();
+  return true;
+}
+
+function checkWin(){
+  if(found.reduce((a,f)=>a+f.length,0)===52){
+    won=true; clearInterval(timer); timer=null;
+    if(time>=30) addScore(Math.floor(700000/time));
+    $('msg').textContent='Tebrikler! 🎉';
+    confetti();
+  }
+}
+
+$('board').addEventListener('click',e=>{
+  if(won||paused) return;
+  const el=e.target.closest('[data-p]'); if(!el) return;
+  const p=el.dataset.p, k=el.dataset.k!==undefined?+el.dataset.k:-1;
+
+  // çift tıklama: temel yığına gönder
+  const now=Date.now();
+  const dbl=last.p===p&&last.k===k&&now-last.t<350;
+  last={p,k,t:dbl?0:now};
+  if(dbl&&k>=0&&p!=='s'&&p[0]!=='f'){
+    const cs=getCards(p,k);
+    if(cs.length===1&&cs[0].up){ sel=null; tryMove({p,k},'f'+cs[0].s); }
+    sel=null; draw(); return;
+  }
+
+  // stok
+  if(p==='s'){
+    sel=null;
+    if(stock.length){const c=stock.pop();c.up=true;waste.push(c);}
+    else if(waste.length){stock=waste.reverse();stock.forEach(c=>c.up=false);waste=[];addScore(-100);}
+    else return;
+    moves++; start(); draw(); return;
+  }
+
+  if(sel){
+    if(sel.p===p&&sel.k===k){sel=null;draw();return;}
+    if(tryMove(sel,p)){sel=null;draw();return;}
+    sel=null;
+  }
+  if(p[0]==='t'){ if(k>=0&&tab[+p.slice(1)][k].up) sel={p,k}; }
+  else if(p==='w'&&waste.length) sel={p,k:waste.length-1};
+  else if(p[0]==='f'&&found[+p.slice(1)].length) sel={p,k:found[+p.slice(1)].length-1};
+  draw();
+});
+
+$('pp').onclick=()=>{
+  if(won||(!timer&&!paused)) return;
+  paused=!paused;
+  document.body.classList.toggle('paused',paused);
+  $('pp').textContent=paused?'▶':'⏸';
+  if(paused){clearInterval(timer);timer=null;} else start();
+};
+$('nw').onclick=newGame;
+
+$('aw').onclick=()=>{
+  $('aw').hidden=true; sel=null;
+  const iv=setInterval(()=>{
+    let did=false;
+    for(let i=0;i<7&&!did;i++){
+      const n=tab[i].length; if(!n) continue;
+      const c=tab[i][n-1];
+      if(tryMove({p:'t'+i,k:n-1},'f'+c.s)) did=true;
+    }
+    draw();
+    if(!did||won) clearInterval(iv);
+  },90);
+};
+
+function confetti(){
+  const cv=$('cv'), x=cv.getContext('2d');
+  cv.width=innerWidth; cv.height=innerHeight;
+  const ps=Array.from({length:120},()=>({x:Math.random()*cv.width,y:-Math.random()*cv.height,v:2+Math.random()*4,w:5+Math.random()*6,a:Math.random()*6,c:`hsl(${Math.random()*360},90%,60%)`}));
+  (function f(){
+    x.clearRect(0,0,cv.width,cv.height);
+    ps.forEach(p=>{p.y+=p.v;p.a+=.1;p.x+=Math.sin(p.a);if(p.y>cv.height)p.y=-10;x.fillStyle=p.c;x.fillRect(p.x,p.y,p.w,p.w*.6);});
+    rafId=requestAnimationFrame(f);
+  })();
+}
+
+newGame();
+</script>
+</body>
+</html>
