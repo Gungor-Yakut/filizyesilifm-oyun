@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Tavla · Filiz Yeşili FM</title>
+<style>
+body{margin:0;background:#3b2314;color:#fff;font-family:system-ui,sans-serif;text-align:center;-webkit-user-select:none;user-select:none}
+#bar{padding:8px;background:rgba(0,0,0,.4);display:flex;gap:10px;flex-wrap:wrap;justify-content:center;align-items:center;font-size:15px}
+button{font:inherit;color:#fff;background:#6b3f1f;border:1px solid #c9a46a;border-radius:8px;padding:6px 12px;cursor:pointer}
+button:disabled{opacity:.4}
+#bd{display:grid;grid-template-columns:repeat(13,1fr);gap:2px;max-width:820px;margin:8px auto;padding:6px;background:#7a4a26;border-radius:10px;box-sizing:border-box}
+.pt{height:min(40vw,190px);border-radius:4px;display:flex;flex-direction:column;align-items:center;padding:2px 0;cursor:pointer;box-sizing:border-box;overflow:hidden;font-size:12px}
+.a{background:#d9b67e}.b{background:#a8552e}.br{background:#4a2c14}
+.top{justify-content:flex-start}.bot{justify-content:flex-end}
+.ck{width:min(5.4vw,42px);height:min(5.4vw,42px);border-radius:50%;margin:1px 0;flex:none;box-shadow:0 1px 3px #0008}
+.w{background:#f5e6c8;border:2px solid #fff}.k{background:#222;border:2px solid #c0392b}
+.sel{outline:3px solid #ffe27a}.tgt{outline:3px solid #5dff7a}
+#msg{min-height:24px;color:#ffe27a;font-weight:700}.sm{font-size:12px;opacity:.75;padding:4px 10px 12px}
+</style></head><body>
+<div id="bar"><button id="rb">🎲 Zar At</button><span id="dc"></span><span id="of"></span><button id="nw">Yeni Oyun</button></div>
+<div id="msg"></div><div id="bd"></div>
+<div class="sm">Beyaz taşlar sensin (sağ alttan sola, ev bölgen sağ alt). Taşı seç, yeşil çerçeveli hedefe tıkla. Tüm taşların eve girince seçili taşa tekrar tıklayarak toplarsın. Kırılan taş ortadaki çubuktan girer.</div>
+<script>
+const $=id=>document.getElementById(id),S=[1,-1],R=()=>1+Math.random()*6|0,dist=(p,i)=>p?24-i:i+1;
+let pts,bar,off,dice,turn,sel,busy,over;
+function msg(t){$('msg').textContent=t}
+function init(){pts=Array(24).fill(0);[[23,2],[12,5],[7,3],[5,5]].forEach(([i,n])=>{pts[i]=n;pts[23-i]=-n});
+ bar=[0,0];off=[0,0];dice=[];turn=0;sel=null;busy=false;over=false;msg('Zar at');draw()}
+function moves(p){const s=S[p],d=-s,out=[];
+ [...new Set(dice)].forEach(k=>{
+  if(bar[p]){const t=p?k-1:24-k;if(pts[t]*s>-2)out.push({f:'b',t,k});return}
+  const home=pts.every((n,i)=>n*s<=0||dist(p,i)<=6),far=Math.max(0,...pts.map((n,i)=>n*s>0?dist(p,i):0));
+  pts.forEach((n,i)=>{if(n*s<=0)return;const t=i+d*k;
+   if(t>=0&&t<24){if(pts[t]*s>-2)out.push({f:i,t,k})}
+   else if(home&&(dist(p,i)===k||(k>dist(p,i)&&far===dist(p,i))))out.push({f:i,t:'o',k})})});
+ return out}
+function roll(p){const a=R(),b=R();dice=a===b?[a,a,a,a]:[a,b];
+ msg((p?'Bilgisayar':'Sen')+' attı: '+dice.join(' - '));draw();
+ if(!moves(p).length){msg((p?'Bilgisayar':'Sen')+' '+dice.join('-')+' attı, oynayacak hamle yok');setTimeout(()=>endTurn(p),1300)}
+ else if(p)setTimeout(ai,800)}
+function endTurn(p){dice=[];sel=null;turn=1-p;draw();
+ if(turn){busy=true;setTimeout(()=>roll(1),700)}else{busy=false;msg('Sıra sende: zar at')}}
+function move(p,m){const s=S[p];
+ if(m.f==='b')bar[p]--;else pts[m.f]-=s;
+ if(m.t==='o')off[p]++;else{if(pts[m.t]*s===-1){pts[m.t]=0;bar[1-p]++}pts[m.t]+=s}
+ dice.splice(dice.indexOf(m.k),1);sel=null;draw();
+ if(off[p]===15){over=true;msg(p?'Bilgisayar kazandı':'🎉 Kazandın!');draw();return true}
+ if(!dice.length||!moves(p).length){setTimeout(()=>endTurn(p),600);return true}
+ return false}
+function ai(){if(over)return;const ms=moves(1);if(!ms.length){endTurn(1);return}
+ let best=null,bv=-1e9;
+ ms.forEach(m=>{let v=Math.random()+m.k*.3;if(m.t==='o')v+=20;else{if(pts[m.t]===1)v+=15;if(pts[m.t]<0)v+=3}
+  if(m.f!=='b'&&pts[m.f]===-1)v+=2;if(v>bv){bv=v;best=m}});
+ if(!move(1,best))setTimeout(ai,650)}
+function click(x){if(turn||busy||over||!dice.length)return;const ms=moves(0);
+ if(sel!==null){const c=ms.filter(m=>m.f===sel&&(x===sel?m.t==='o':m.t===x)).sort((a,b)=>a.k-b.k)[0];
+  if(c){move(0,c);return}}
+ sel=ms.some(m=>m.f===x)?x:null;draw()}
+function cell(i,top){
+ if(i==='b'){const n=bar[top?1:0];return `<div class="pt br ${top?'top':'bot'}" ${top?'':'data-i="b"'} class="">${n?`<div class="ck ${top?'k':'w'}"></div><b>${n}</b>`:''}</div>`}
+ const n=Math.abs(pts[i]),c=pts[i]>0?'w':'k',ms=(!turn&&dice.length)?moves(0):[];
+ const tg=sel!==null&&ms.some(m=>m.f===sel&&m.t===i);
+ return `<div class="pt ${i%2?'a':'b'} ${top?'top':'bot'} ${sel===i?'sel':''} ${tg?'tgt':''}" data-i="${i}">${n?`<div class="ck ${c}"></div>`.repeat(Math.min(n,5))+(n>5?`<b>${n}</b>`:''):''}</div>`}
+function draw(){
+ if(!turn&&dice.length&&bar[0]&&sel===null)sel='b';
+ const T=[12,13,14,15,16,17,'b',18,19,20,21,22,23],B=[11,10,9,8,7,6,'b',5,4,3,2,1,0];
+ $('bd').innerHTML=T.map(i=>cell(i,1)).join('')+B.map(i=>cell(i,0)).join('');
+ $('dc').textContent=dice.length?'Zar: '+dice.join(' · '):'';
+ $('of').textContent='Çıkan: Sen '+off[0]+' · Bilg. '+off[1];
+ $('rb').disabled=!(turn===0&&!dice.length&&!over&&!busy)}
+$('bd').addEventListener('click',e=>{const el=e.target.closest('[data-i]');if(!el)return;const v=el.dataset.i;click(v==='b'?'b':+v)});
+$('rb').onclick=()=>{if(!turn&&!dice.length&&!over)roll(0)};$('nw').onclick=init;init();
+</script></body></html>

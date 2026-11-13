@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Yılan · Filiz Yeşili FM</title>
+<style>
+body{margin:0;background:#0b1f14;color:#d6f5e0;font-family:system-ui,sans-serif;text-align:center;touch-action:none;-webkit-user-select:none;user-select:none}
+canvas{background:#10331f;border:3px solid #2e7d4f;border-radius:8px;width:min(94vw,420px);height:min(94vw,420px);margin-top:6px}
+button{font:inherit;background:#2e7d4f;color:#fff;border:0;border-radius:6px;padding:7px 14px;cursor:pointer;margin:4px}
+</style></head><body>
+<div style="padding:8px">Puan: <b id="sc">0</b> <button id="nw">Yeni Oyun</button></div>
+<canvas id="c" width="400" height="400"></canvas><div id="m" style="font-weight:700;min-height:24px"></div>
+<div style="font-size:12px;padding:4px">Ok tuşları veya parmakla kaydır.</div>
+<script>
+const cv=document.getElementById('c'),x=cv.getContext('2d'),N=20,Z=20;let s,d,nd,f,sc,iv,dead;
+function nw(){s=[{x:10,y:10},{x:9,y:10},{x:8,y:10}];d=nd={x:1,y:0};sc=0;dead=false;food();document.getElementById('m').textContent='';
+ clearInterval(iv);iv=setInterval(step,120);draw()}
+function food(){do f={x:Math.random()*N|0,y:Math.random()*N|0};while(s.some(p=>p.x===f.x&&p.y===f.y))}
+function step(){d=nd;const h={x:s[0].x+d.x,y:s[0].y+d.y};
+ if(h.x<0||h.y<0||h.x>=N||h.y>=N||s.some(p=>p.x===h.x&&p.y===h.y)){dead=true;clearInterval(iv);document.getElementById('m').textContent='Oyun bitti';return}
+ s.unshift(h);if(h.x===f.x&&h.y===f.y){sc++;food()}else s.pop();
+ document.getElementById('sc').textContent=sc;draw()}
+function draw(){x.clearRect(0,0,400,400);x.fillStyle='#ff5d5d';x.beginPath();x.arc(f.x*Z+10,f.y*Z+10,8,0,7);x.fill();
+ s.forEach((p,i)=>{x.fillStyle=i?'#5dff9a':'#c8ffe0';x.fillRect(p.x*Z+1,p.y*Z+1,Z-2,Z-2)})}
+function turn(a,b){if(a!==-d.x||b!==-d.y)nd={x:a,y:b}}
+document.addEventListener('keydown',e=>{const m={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]}[e.key];if(m){e.preventDefault();turn(...m)}});
+let sx,sy;document.addEventListener('touchstart',e=>{sx=e.touches[0].clientX;sy=e.touches[0].clientY});
+document.addEventListener('touchend',e=>{const dx=e.changedTouches[0].clientX-sx,dy=e.changedTouches[0].clientY-sy;if(Math.max(Math.abs(dx),Math.abs(dy))<20)return;
+ Math.abs(dx)>Math.abs(dy)?turn(dx<0?-1:1,0):turn(0,dy<0?-1:1)});
+document.getElementById('nw').onclick=nw;nw();
+</script></body></html>
