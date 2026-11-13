@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pişti · Filiz Yeşili FM</title>
+<style>
+:root{--cw:min(17vw,84px)}
+html,body{margin:0;min-height:100%}
+body{background:radial-gradient(circle at 50% 30%,#0e6b38,#06361b);color:#f3f5f7;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;-webkit-user-select:none;user-select:none;text-align:center}
+#bar{display:flex;flex-wrap:wrap;gap:8px 16px;justify-content:center;align-items:center;padding:10px;background:rgba(0,0,0,.3);font-size:15px}
+button{font:inherit;color:#fff;background:rgba(0,0,0,.45);border:1px solid rgba(255,255,255,.3);border-radius:8px;padding:6px 12px;cursor:pointer}
+button:hover{background:rgba(0,0,0,.65)}
+.row{display:flex;justify-content:center;gap:calc(var(--cw)*.12);padding:12px 6px;min-height:calc(var(--cw)*1.5)}
+.card{width:var(--cw);height:calc(var(--cw)*1.4);border-radius:7px;box-shadow:0 1px 4px rgba(0,0,0,.5);position:relative;box-sizing:border-box;transition:transform .15s}
+.up{background:#fff;color:#111}.up.red{color:#c00}
+.back{background:repeating-linear-gradient(45deg,#1d4ed8 0 6px,#1e3a8a 6px 12px);border:3px solid #fff}
+.up b{position:absolute;top:4px;left:6px;font-size:calc(var(--cw)*.27)}
+.up i{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-style:normal;font-size:calc(var(--cw)*.55)}
+#me .card{cursor:pointer}#me .card:hover{transform:translateY(-8px)}
+#tbl{display:flex;justify-content:center;align-items:center;gap:14px;min-height:calc(var(--cw)*1.6);padding:8px}
+#msg{min-height:28px;font-weight:700;color:#ffe27a;padding:4px 8px}
+.rules{font-size:12px;opacity:.75;padding:6px 14px 14px}
+</style>
+</head>
+<body>
+<div id="bar">
+  <span>Sen: <b id="s0">0</b> kart</span>
+  <span>Bilgisayar: <b id="s1">0</b> kart</span>
+  <span>Deste: <b id="dk">0</b></span>
+  <button id="nw">Yeni Oyun</button>
+</div>
+<div class="row" id="opp"></div>
+<div id="tbl"></div>
+<div id="msg"></div>
+<div class="row" id="me"></div>
+<div class="rules">Ortadaki son kartla aynı değerde kart atarsan yığını alırsın. Vale (J) her zaman yığını alır. Yığında tek kart varken alırsan pişti (10 puan), vale üstüne vale çifte pişti (20 puan). 2♣ = 2, 10♦ = 3, As ve vale = 1 puan, en çok kartı toplayan +3.</div>
+
+<script>
+const SU=['♠','♥','♦','♣'],RK=['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
+const $=id=>document.getElementById(id);
+let deck,hand,pile,cap,bonus,turn,lastCap,busy,over;
+
+function nw(){
+  deck=[];for(let s=0;s<4;s++)for(let r=0;r<13;r++)deck.push({r,s});
+  for(let i=51;i>0;i--){const j=Math.random()*(i+1)|0;[deck[i],deck[j]]=[deck[j],deck[i]];}
+  hand=[[],[]];cap=[[],[]];bonus=[0,0];pile=deck.splice(0,4);
+  lastCap=-1;turn=0;busy=false;over=false;give();msg('Sıra sende');draw();
+}
+function give(){for(let k=0;k<4;k++){hand[0].push(deck.pop());hand[1].push(deck.pop());}}
+function msg(t){$('msg').textContent=t;}
+const val=c=>(c.r===0||c.r===10)?1:(c.r===1&&c.s===3)?2:(c.r===9&&c.s===2)?3:0;
+const face=c=>`<div class="card up ${c.s===1||c.s===2?'red':''}"><b>${RK[c.r]}${SU[c.s]}</b><i>${SU[c.s]}</i></div>`;
+const back='<div class="card back"></div>';
+
+function draw(){
+  $('opp').innerHTML=hand[1].map(()=>back).join('');
+  $('me').innerHTML=hand[0].map((c,i)=>face(c).replace('class="card','data-i="'+i+'" class="card')).join('');
+  const top=pile[pile.length-1];
+  $('tbl').innerHTML=pile.length?face(top)+'<span>'+pile.length+' kart</span>':'<span>Masa boş</span>';
+  $('s0').textContent=cap[0].length;$('s1').textContent=cap[1].length;$('dk').textContent=deck.length;
+}
+
+function play(p,i){
+  const c=hand[p].splice(i,1)[0],top=pile[pile.length-1],who=p?'Bilgisayar':'Sen';
+  pile.push(c);
+  if(top&&(top.r===c.r||c.r===10)){
+    if(pile.length===2&&top.r===c.r){
+      const dbl=c.r===10;bonus[p]+=dbl?20:10;msg(who+(dbl?' ÇİFTE PİŞTİ!':' PİŞTİ!'));
+    }else msg(who+' yığını aldı');
+    cap[p].push(...pile);pile=[];lastCap=p;
+  }else msg(who+' attı: '+RK[c.r]+SU[c.s]);
+  next();
+}
+function next(){
+  draw();
+  if(!hand[0].length&&!hand[1].length){if(deck.length)give();else{end();return;}}
+  turn=1-turn;draw();
+  if(turn===1){busy=true;setTimeout(()=>{play(1,ai());busy=false;},900);}
+}
+function ai(){
+  const h=hand[1],top=pile[pile.length-1];
+  let m=h.findIndex(c=>top&&c.r===top.r);if(m>=0)return m;
+  const j=h.findIndex(c=>c.r===10);if(j>=0&&pile.length>=3)return j;
+  let best=0,bv=99;
+  h.forEach((c,i)=>{const v=val(c)+(c.r===10?2:0);if(v<bv){bv=v;best=i;}});
+  return best;
+}
+function end(){
+  over=true;
+  if(pile.length&&lastCap>=0)cap[lastCap].push(...pile);pile=[];draw();
+  const s=[0,1].map(p=>cap[p].reduce((a,c)=>a+val(c),0)+bonus[p]);
+  if(cap[0].length>cap[1].length)s[0]+=3;else if(cap[1].length>cap[0].length)s[1]+=3;
+  msg('Oyun bitti. Sen: '+s[0]+'  Bilgisayar: '+s[1]+(s[0]>s[1]?'  🎉 Kazandın!':s[0]<s[1]?'  Bilgisayar kazandı':'  Berabere'));
+}
+$('me').addEventListener('click',e=>{
+  const el=e.target.closest('[data-i]');
+  if(!el||turn!==0||busy||over)return;
+  play(0,+el.dataset.i);
+});
+$('nw').onclick=nw;
+nw();
+</script>
+</body>
+</html>
